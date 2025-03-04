@@ -1,6 +1,7 @@
 import logging
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Union
 
 import asyncio
@@ -324,14 +325,26 @@ def get_embedding_function(
 
         def generate_multiple(query, user, func):
             if isinstance(query, list):
-                embeddings = []
-                for i in range(0, len(query), embedding_batch_size):
-                    embeddings.extend(
-                        func(query[i : i + embedding_batch_size], user=user)
-                    )
+                # Split the queries into batches
+                batches = [
+                    query[i : i + embedding_batch_size]
+                    for i in range(0, len(query), embedding_batch_size)
+                ]
+                # Use ThreadPoolExecutor to process batches concurrently
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    # Submit all batches to the executor
+                    futures = [
+                        executor.submit(func, batch, user=user) for batch in batches
+                    ]
+                    # Collect results in the order of submission to maintain text order
+                    results = [future.result() for future in futures]
+                # Flatten the list of batch results into a single list of embeddings
+                embeddings = [
+                    embedding for batch_result in results for embedding in batch_result
+                ]
                 return embeddings
             else:
-                return func(query, user)
+                return func(query, user=user)
 
         return lambda query, user=None: generate_multiple(query, user, func)
     else:
