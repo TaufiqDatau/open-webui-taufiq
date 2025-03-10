@@ -188,6 +188,18 @@ class GroupTable:
             except Exception:
                 return False
 
+    def get_group_by_name(self, name: str) -> GroupModel:
+        with get_db() as db:
+            try:
+                group = db.query(Group).filter_by(name=name).first()
+                if group is None:
+                    raise ValueError(f"Group with name '{name}' not found")
+                # Convert to Pydantic model
+                return GroupModel.model_validate(group)
+            except Exception as e:
+                log.error("Error fetching group '%s': %s", name, e)
+                raise
+
     def remove_user_from_all_groups(self, user_id: str) -> bool:
         with get_db() as db:
             try:

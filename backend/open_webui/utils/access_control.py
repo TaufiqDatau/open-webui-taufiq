@@ -20,7 +20,8 @@ def fill_missing_permissions(
         elif isinstance(value, dict) and isinstance(
             permissions[key], dict
         ):  # Both are nested dictionaries
-            permissions[key] = fill_missing_permissions(permissions[key], value)
+            permissions[key] = fill_missing_permissions(
+                permissions[key], value)
 
     return permissions
 
@@ -34,7 +35,6 @@ def get_permissions(
     If a permission is defined in multiple groups, the most permissive value is used (True > False).
     Permissions are nested in a dict with the permission key as the key and a boolean as the value.
     """
-
     def combine_permissions(
         permissions: Dict[str, Any], group_permissions: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -58,9 +58,13 @@ def get_permissions(
     # Deep copy default permissions to avoid modifying the original dict
     permissions = json.loads(json.dumps(default_permissions))
 
+    print(f"this is the list of the group permissions {user_groups}")
     # Combine permissions from all user groups
     for group in user_groups:
         group_permissions = group.permissions
+        print(f"this is the group permission {group_permissions}")
+        if not group_permissions:
+            continue
         permissions = combine_permissions(permissions, group_permissions)
 
     # Ensure all fields from default_permissions are present and filled in

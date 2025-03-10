@@ -19,6 +19,7 @@ from open_webui.models.auths import (
     UserResponse,
 )
 from open_webui.models.users import Users
+from open_webui.models.groups import GroupForm, GroupUpdateForm, Groups
 
 from open_webui.constants import ERROR_MESSAGES, WEBHOOK_MESSAGES
 from open_webui.env import (
@@ -226,13 +227,15 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
         )
 
         if not search_success:
-            raise HTTPException(400, detail="User not found in the LDAP server")
+            raise HTTPException(
+                400, detail="User not found in the LDAP server")
 
         entry = connection_app.entries[0]
         username = str(entry[f"{LDAP_ATTRIBUTE_FOR_USERNAME}"]).lower()
         email = str(entry[f"{LDAP_ATTRIBUTE_FOR_MAIL}"])
         if not email or email == "" or email == "[]":
-            raise HTTPException(400, f"User {form_data.user} does not have email.")
+            raise HTTPException(
+                400, f"User {form_data.user} does not have email.")
         else:
             email = email.lower()
 
@@ -248,7 +251,8 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
                 authentication="SIMPLE",
             )
             if not connection_user.bind():
-                raise HTTPException(400, f"Authentication failed for {form_data.user}")
+                raise HTTPException(
+                    400, f"Authentication failed for {form_data.user}")
 
             user = Users.get_user_by_email(email)
             if not user:
@@ -276,7 +280,8 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
                 except HTTPException:
                     raise
                 except Exception as err:
-                    raise HTTPException(500, detail=ERROR_MESSAGES.DEFAULT(err))
+                    raise HTTPException(
+                        500, detail=ERROR_MESSAGES.DEFAULT(err))
 
             user = Auths.authenticate_user_by_trusted_header(email)
 
@@ -329,9 +334,11 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 async def signin(request: Request, response: Response, form_data: SigninForm):
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
-            raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
+            raise HTTPException(
+                400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
 
-        trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
+        trusted_email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower(
+        )
         trusted_name = trusted_email
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             trusted_name = request.headers.get(
@@ -359,12 +366,14 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             await signup(
                 request,
                 response,
-                SignupForm(email=admin_email, password=admin_password, name="User"),
+                SignupForm(email=admin_email,
+                           password=admin_password, name="User"),
             )
 
             user = Auths.authenticate_user(admin_email.lower(), admin_password)
     else:
-        user = Auths.authenticate_user(form_data.email.lower(), form_data.password)
+        user = Auths.authenticate_user(
+            form_data.email.lower(), form_data.password)
 
     if user:
 
@@ -463,18 +472,55 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
         )
 
         if user:
-            expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
+
+            expires_delta = parse_duration(
+                request.app.state.config.JWT_EXPIRES_IN)
             expires_at = None
             if expires_delta:
-                expires_at = int(time.time()) + int(expires_delta.total_seconds())
+                expires_at = int(time.time()) + \
+                    int(expires_delta.total_seconds())
 
             token = create_token(
                 data={"id": user.id},
                 expires_delta=expires_delta,
             )
+            if user.role != "admin":
+                try:
+                    group = Groups.get_group_by_name("Free")
+                    log.info(f"manage to get group {group}")
+                except ValueError:
+                    # Create the 'Free' group if it doesn't exist
+                    group_form = GroupForm(
+                        name="Free",
+                        description="Default group for free-tier users",
+                        permissions={},
+                    )
+                    # Use new user's ID as the creator (user_id for group)
+                    group = Groups.insert_new_group(
+                        user_id=user.id,  # Newly created user becomes group creator
+                        form_data=group_form,
+                    )
+                    if not group:
+                        raise Exception("Failed to create 'Free' group")
+
+                updated_user_ids = group.user_ids.copy() if group.user_ids else []
+                updated_user_ids.append(user.id)
+
+                # All fields from GroupForm must be included in the update
+                group_data = GroupUpdateForm(
+                    name=group.name,  # Required by parent class
+                    description=group.description,  # Required by parent class
+                    permissions=group.permissions,
+                    user_ids=updated_user_ids,  # Additional field
+                )
+
+                Groups.update_group_by_id(group.id, group_data)
+                log.info("Inserting user id %s into group id %s",
+                         user.id, group.id)
 
             datetime_expires_at = (
-                datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc)
+                datetime.datetime.fromtimestamp(
+                    expires_at, datetime.timezone.utc)
                 if expires_at
                 else None
             )
@@ -501,9 +547,13 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
                     },
                 )
 
+            log.info("Get User Permission")
+
             user_permissions = get_permissions(
                 user.id, request.app.state.config.USER_PERMISSIONS
             )
+
+            log.info(f"List of user permission: {user_permissions}")
 
             return {
                 "token": token,
@@ -534,7 +584,8 @@ async def signout(request: Request, response: Response):
                     async with session.get(OPENID_PROVIDER_URL.value) as resp:
                         if resp.status == 200:
                             openid_data = await resp.json()
-                            logout_url = openid_data.get("end_session_endpoint")
+                            logout_url = openid_data.get(
+                                "end_session_endpoint")
                             if logout_url:
                                 response.delete_cookie("oauth_id_token")
                                 return RedirectResponse(
