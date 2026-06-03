@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { safeImageUrl } from '$lib/utils/safeImageUrl';
 
 	import { settings } from '$lib/stores';
 	import ImagePreview from './ImagePreview.svelte';
@@ -19,14 +20,14 @@
 	const i18n = getContext('i18n');
 
 	let _src = '';
-	$: _src = src.startsWith('/') ? `${WEBUI_BASE_URL}${src}` : src;
+	$: _src = safeImageUrl(src.startsWith('/') ? `${WEBUI_BASE_URL}${src}` : src);
 
 	let showImagePreview = false;
 </script>
 
 <ImagePreview bind:show={showImagePreview} src={_src} {alt} />
 
-<div class=" relative group w-fit">
+<div class=" relative group w-fit flex items-center">
 	<button
 		class={className}
 		on:click={() => {

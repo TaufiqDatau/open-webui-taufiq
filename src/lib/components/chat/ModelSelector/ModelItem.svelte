@@ -5,7 +5,7 @@
 	import dayjs from '$lib/dayjs';
 
 	import { mobile, settings, user } from '$lib/stores';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
@@ -14,6 +14,8 @@
 	import ModelItemMenu from './ModelItemMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import { toast } from 'svelte-sonner';
+	import Tag from '$lib/components/icons/Tag.svelte';
+	import Label from '$lib/components/icons/Label.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -24,6 +26,7 @@
 
 	export let unloadModelHandler: (modelValue: string) => void = () => {};
 	export let pinModelHandler: (modelId: string) => void = () => {};
+	export let deleteModelHandler: (model: any) => void = () => {};
 
 	export let onClick: () => void = () => {};
 
@@ -42,9 +45,10 @@
 </script>
 
 <button
-	aria-roledescription="model-item"
-	aria-label={item.label}
-	class="flex group/item w-full text-left font-medium line-clamp-1 select-none items-center rounded-button py-2 pl-3 pr-1.5 text-sm text-gray-700 dark:text-gray-100 outline-hidden transition-all duration-75 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg cursor-pointer data-highlighted:bg-muted {index ===
+	role="option"
+	aria-selected={value === item.value}
+	aria-label={$i18n.t('Select {{modelName}} model', { modelName: item.label })}
+	class="flex group/item w-full text-left font-medium line-clamp-1 select-none items-center rounded-button py-2 pl-3 pr-1.5 text-sm text-gray-700 dark:text-gray-100 outline-hidden transition-all duration-75 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl cursor-pointer data-highlighted:bg-muted {index ===
 	selectedModelIdx
 		? 'bg-gray-100 dark:bg-gray-800 group-hover:bg-transparent'
 		: ''}"
@@ -55,30 +59,33 @@
 	}}
 >
 	<div class="flex flex-col flex-1 gap-1.5">
-		{#if (item?.model?.tags ?? []).length > 0}
+		<!-- {#if (item?.model?.tags ?? []).length > 0}
 			<div
 				class="flex gap-0.5 self-center items-start h-full w-full translate-y-[0.5px] overflow-x-auto scrollbar-none"
 			>
 				{#each item.model?.tags.sort((a, b) => a.name.localeCompare(b.name)) as tag}
 					<Tooltip content={tag.name} className="flex-shrink-0">
 						<div
-							class=" text-xs font-bold px-1 rounded-sm uppercase bg-gray-500/20 text-gray-700 dark:text-gray-200"
+							class=" text-xs font-semibold px-1 rounded-sm uppercase bg-gray-500/20 text-gray-700 dark:text-gray-200"
 						>
 							{tag.name}
 						</div>
 					</Tooltip>
 				{/each}
 			</div>
-		{/if}
+		{/if} -->
 
 		<div class="flex items-center gap-2">
 			<div class="flex items-center min-w-fit">
 				<Tooltip content={$user?.role === 'admin' ? (item?.value ?? '') : ''} placement="top-start">
 					<img
-						src={item.model?.info?.meta?.profile_image_url ??
-							`${WEBUI_BASE_URL}/static/favicon.png`}
-						alt="Model"
+						src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${item.model.id}&lang=${$i18n.language}`}
+						alt={$i18n.t('{{modelName}} profile image', { modelName: item.label })}
 						class="rounded-full size-5 flex items-center"
+						loading="lazy"
+						on:error={(e) => {
+							e.currentTarget.src = '/favicon.png';
+						}}
 					/>
 				</Tooltip>
 			</div>
@@ -113,28 +120,52 @@
 							</Tooltip>
 						</div>
 					{/if}
-					{#if item.model.ollama?.expires_at && new Date(item.model.ollama?.expires_at * 1000) > new Date()}
-						<div class="flex items-center translate-y-[0.5px] px-0.5">
-							<Tooltip
-								content={`${$i18n.t('Unloads {{FROM_NOW}}', {
-									FROM_NOW: dayjs(item.model.ollama?.expires_at * 1000).fromNow()
-								})}`}
-								className="self-end"
-							>
-								<div class=" flex items-center">
-									<span class="relative flex size-2">
-										<span
-											class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
-										/>
-										<span class="relative inline-flex rounded-full size-2 bg-green-500" />
-									</span>
-								</div>
-							</Tooltip>
-						</div>
-					{/if}
+				{/if}
+
+				{#if item.model.loaded}
+					<div class="flex items-center translate-y-[0.5px] px-0.5">
+						<Tooltip
+							content={item.model.ollama?.expires_at &&
+							new Date(item.model.ollama?.expires_at * 1000) > new Date()
+								? `${$i18n.t('Unloads {{FROM_NOW}}', {
+										FROM_NOW: dayjs(item.model.ollama?.expires_at * 1000).fromNow()
+									})}`
+								: `${$i18n.t('Loaded')}`}
+							className="self-end"
+						>
+							<div class=" flex items-center">
+								<span class="relative flex size-2">
+									<span
+										class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"
+									/>
+									<span class="relative inline-flex rounded-full size-2 bg-green-500" />
+								</span>
+							</div>
+						</Tooltip>
+					</div>
 				{/if}
 
 				<!-- {JSON.stringify(item.info)} -->
+
+				{#if (item?.model?.tags ?? []).length > 0}
+					{#key item.model.id}
+						<Tooltip elementId="tags-{item.model.id}">
+							<div slot="tooltip" id="tags-{item.model.id}">
+								{#each item.model?.tags.sort((a, b) => a.name.localeCompare(b.name)) as tag}
+									<Tooltip content={tag.name} className="flex-shrink-0">
+										<div class=" text-xs font-medium rounded-sm uppercase text-white">
+											{tag.name}
+										</div>
+									</Tooltip>
+								{/each}
+							</div>
+
+							<div class="translate-y-[1px]">
+								<Tag />
+							</div>
+						</Tooltip>
+					{/key}
+				{/if}
 
 				{#if item.model?.direct}
 					<Tooltip content={`${$i18n.t('Direct')}`}>
@@ -206,13 +237,14 @@
 	</div>
 
 	<div class="ml-auto pl-2 pr-1 flex items-center gap-1.5 shrink-0">
-		{#if $user?.role === 'admin' && item.model.owned_by === 'ollama' && item.model.ollama?.expires_at && new Date(item.model.ollama?.expires_at * 1000) > new Date()}
+		{#if $user?.role === 'admin' && item.model.loaded}
 			<Tooltip
 				content={`${$i18n.t('Eject')}`}
 				className="flex-shrink-0 group-hover/item:opacity-100 opacity-0 "
 			>
 				<button
 					class="flex"
+					aria-label={$i18n.t('Eject model')}
 					on:click={(e) => {
 						e.preventDefault();
 						e.stopPropagation();
@@ -228,11 +260,13 @@
 			bind:show={showMenu}
 			model={item.model}
 			{pinModelHandler}
+			{deleteModelHandler}
 			copyLinkHandler={() => {
 				copyLinkHandler(item.model);
 			}}
 		>
 			<button
+				aria-label={`${$i18n.t('More Options')}`}
 				class="flex"
 				on:click={(e) => {
 					e.preventDefault();

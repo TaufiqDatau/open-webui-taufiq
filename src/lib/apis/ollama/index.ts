@@ -135,41 +135,6 @@ export const getOllamaUrls = async (token: string = '') => {
 	return res.OLLAMA_BASE_URLS;
 };
 
-export const updateOllamaUrls = async (token: string = '', urls: string[]) => {
-	let error = null;
-
-	const res = await fetch(`${OLLAMA_API_BASE_URL}/urls/update`, {
-		method: 'POST',
-		headers: {
-			Accept: 'application/json',
-			'Content-Type': 'application/json',
-			...(token && { authorization: `Bearer ${token}` })
-		},
-		body: JSON.stringify({
-			urls: urls
-		})
-	})
-		.then(async (res) => {
-			if (!res.ok) throw await res.json();
-			return res.json();
-		})
-		.catch((err) => {
-			console.error(err);
-			if ('detail' in err) {
-				error = err.detail;
-			} else {
-				error = 'Server connection failed';
-			}
-			return null;
-		});
-
-	if (error) {
-		throw error;
-	}
-
-	return res.OLLAMA_BASE_URLS;
-};
-
 export const getOllamaVersion = async (token: string, urlIdx?: number) => {
 	let error = null;
 
@@ -234,7 +199,7 @@ export const getOllamaModels = async (token: string = '', urlIdx: null | number 
 	return (res?.models ?? [])
 		.map((model) => ({ id: model.model, name: model.name ?? model.model, ...model }))
 		.sort((a, b) => {
-			return a.name.localeCompare(b.name);
+			return (a?.name ?? a?.id ?? '').localeCompare(b?.name ?? b?.id ?? '');
 		});
 };
 
@@ -331,7 +296,7 @@ export const generateTextCompletion = async (token: string = '', model: string, 
 };
 
 export const generateChatCompletion = async (token: string = '', body: object) => {
-	let controller = new AbortController();
+	const controller = new AbortController();
 	let error = null;
 
 	const res = await fetch(`${OLLAMA_API_BASE_URL}/api/chat`, {
